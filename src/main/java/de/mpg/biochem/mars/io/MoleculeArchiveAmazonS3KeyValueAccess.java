@@ -29,9 +29,10 @@
 
 package de.mpg.biochem.mars.io;
 
-import com.amazonaws.services.s3.AmazonS3;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
@@ -45,35 +46,45 @@ import java.nio.channels.NonReadableChannelException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import com.amazonaws.services.s3.model.DeleteObjectsRequest;
-import com.amazonaws.services.s3.model.ListObjectsV2Request;
-import com.amazonaws.services.s3.model.ListObjectsV2Result;
-import com.amazonaws.services.s3.model.ObjectListing;
-import com.amazonaws.services.s3.model.ObjectMetadata;
-import com.amazonaws.services.s3.model.S3ObjectInputStream;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
+import software.amazon.awssdk.services.s3.model.CommonPrefix;
+import software.amazon.awssdk.services.s3.model.Delete;
+import software.amazon.awssdk.services.s3.model.DeleteBucketRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 public class MoleculeArchiveAmazonS3KeyValueAccess {
-    private final AmazonS3 s3;
+    private final S3Client s3;
     private final String bucketName;
 
     /**
-     * Opens an {@link AmazonS3} client and a given bucket name.
+     * Opens an {@link S3Client} client and a given bucket name.
      *
      * @param s3 the s3 instance
      * @param bucketName the bucket name
      * @throws IOException if the access could not be created
      */
-    public MoleculeArchiveAmazonS3KeyValueAccess(final AmazonS3 s3, final String bucketName) throws IOException {
+    public MoleculeArchiveAmazonS3KeyValueAccess(final S3Client s3, final String bucketName) throws IOException {
 
         this.s3 = s3;
         this.bucketName = bucketName;
 
-        if (!s3.doesBucketExistV2(bucketName)) throw new IOException("Bucket " + bucketName + " does not exist.");
+        try {
+            s3.headBucket(HeadBucketRequest.builder().bucket(bucketName).build());
+        } catch (final NoSuchBucketException e) {
+            throw new IOException("Bucket " + bucketName + " does not exist.");
+        }
     }
 
     public String[] components(final String path) {
@@ -236,12 +247,13 @@ public class MoleculeArchiveAmazonS3KeyValueAccess {
      * @return {@code true} if {@code key} exists.
      */
     private boolean keyExists(final String key) {
-        final ListObjectsV2Request listObjectsRequest = new ListObjectsV2Request()
-                .withBucketName(bucketName)
-                .withPrefix(key)
-                .withMaxKeys(1);
-        final ListObjectsV2Result objectsListing = s3.listObjectsV2(listObjectsRequest);
-        return objectsListing.getKeyCount() > 0;
+        final ListObjectsV2Request listObjectsRequest = ListObjectsV2Request.builder()
+                .bucket(bucketName)
+                .prefix(key)
+                .maxKeys(1)
+                .build();
+        final ListObjectsV2Response objectsListing = s3.listObjectsV2(listObjectsRequest);
+        return objectsListing.keyCount() > 0;
     }
 
     /**
@@ -311,17 +323,19 @@ public class MoleculeArchiveAmazonS3KeyValueAccess {
     public List<String> listObjectKeys(final String normalPath) {
         final List<String> keys = new ArrayList<>();
         final String prefix = removeLeadingSlash(addTrailingSlash(normalPath));
-        final ListObjectsV2Request listObjectsRequest = new ListObjectsV2Request()
-                .withBucketName(bucketName)
-                .withPrefix(prefix)
-                .withDelimiter("/");
-        ListObjectsV2Result objectsListing;
+        String continuationToken = null;
+        ListObjectsV2Response objectsListing;
         do {
-            objectsListing = s3.listObjectsV2(listObjectsRequest);
-            for (final S3ObjectSummary objectSummary : objectsListing.getObjectSummaries()) {
-                keys.add(objectSummary.getKey());
+            objectsListing = s3.listObjectsV2(ListObjectsV2Request.builder()
+                    .bucket(bucketName)
+                    .prefix(prefix)
+                    .delimiter("/")
+                    .continuationToken(continuationToken)
+                    .build());
+            for (final S3Object objectSummary : objectsListing.contents()) {
+                keys.add(objectSummary.key());
             }
-            listObjectsRequest.setContinuationToken(objectsListing.getNextContinuationToken());
+            continuationToken = objectsListing.nextContinuationToken();
         } while (objectsListing.isTruncated());
         return keys;
     }
@@ -333,17 +347,19 @@ public class MoleculeArchiveAmazonS3KeyValueAccess {
     private String[] list(final String normalPath, final boolean onlyDirectories) {
         final List<String> items = new ArrayList<>();
         final String prefix = removeLeadingSlash(addTrailingSlash(normalPath));
-        final ListObjectsV2Request listObjectsRequest = new ListObjectsV2Request()
-                .withBucketName(bucketName)
-                .withPrefix(prefix)
-                .withDelimiter("/");
-        ListObjectsV2Result objectsListing;
+        String continuationToken = null;
+        ListObjectsV2Response objectsListing;
         do {
-            objectsListing = s3.listObjectsV2(listObjectsRequest);
-            for (final String commonPrefix : objectsListing.getCommonPrefixes()) items.add(lastGroupName(commonPrefix));
+            objectsListing = s3.listObjectsV2(ListObjectsV2Request.builder()
+                    .bucket(bucketName)
+                    .prefix(prefix)
+                    .delimiter("/")
+                    .continuationToken(continuationToken)
+                    .build());
+            for (final CommonPrefix commonPrefix : objectsListing.commonPrefixes()) items.add(lastGroupName(commonPrefix.prefix()));
             if (!onlyDirectories)
-                for (final S3ObjectSummary objectSummary : objectsListing.getObjectSummaries()) items.add(lastGroupName(objectSummary.getKey()));
-            listObjectsRequest.setContinuationToken(objectsListing.getNextContinuationToken());
+                for (final S3Object objectSummary : objectsListing.contents()) items.add(lastGroupName(objectSummary.key()));
+            continuationToken = objectsListing.nextContinuationToken();
         } while (objectsListing.isTruncated());
         return items.toArray(new String[items.size()]);
     }
@@ -366,148 +382,71 @@ public class MoleculeArchiveAmazonS3KeyValueAccess {
             if (path.equals("/")) {
                 continue;
             }
-            final ObjectMetadata metadata = new ObjectMetadata();
-            metadata.setContentLength(0);
             s3.putObject(
-                    bucketName,
-                    path,
-                    new ByteArrayInputStream(new byte[0]),
-                    metadata);
+                    PutObjectRequest.builder().bucket(bucketName).key(path).build(),
+                    RequestBody.fromBytes(new byte[0]));
         }
     }
 
     public void delete(final String normalPath) throws IOException {
 
-        if (!s3.doesBucketExistV2(bucketName))
+        try {
+            s3.headBucket(HeadBucketRequest.builder().bucket(bucketName).build());
+        } catch (final NoSuchBucketException e) {
             return;
+        }
 
         // remove bucket when deleting "/"
         if (normalPath.equals(normalize("/"))) {
 
             // need to delete all objects before deleting the bucket
             // see: https://docs.aws.amazon.com/AmazonS3/latest/userguide/delete-bucket.html
-            ObjectListing objectListing = s3.listObjects(bucketName);
-            while (true) {
-                final Iterator<S3ObjectSummary> objIter = objectListing.getObjectSummaries().iterator();
-                while (objIter.hasNext()) {
-                    s3.deleteObject(bucketName, objIter.next().getKey());
-                }
+            String continuationToken = null;
+            ListObjectsV2Response objectsListing;
+            do {
+                objectsListing = s3.listObjectsV2(ListObjectsV2Request.builder()
+                        .bucket(bucketName)
+                        .continuationToken(continuationToken)
+                        .build());
+                for (final S3Object object : objectsListing.contents())
+                    s3.deleteObject(DeleteObjectRequest.builder().bucket(bucketName).key(object.key()).build());
+                continuationToken = objectsListing.nextContinuationToken();
+            } while (objectsListing.isTruncated());
 
-                // If the bucket contains many objects, the listObjects() call
-                // might not return all of the objects in the first listing. Check to
-                // see whether the listing was truncated. If so, retrieve the next page of objects
-                // and delete them.
-                if (objectListing.isTruncated()) {
-                    objectListing = s3.listNextBatchOfObjects(objectListing);
-                } else {
-                    break;
-                }
-            }
-
-            s3.deleteBucket(bucketName);
+            s3.deleteBucket(DeleteBucketRequest.builder().bucket(bucketName).build());
             return;
         }
 
         final String path = removeLeadingSlash(normalPath);
 
         if (!path.endsWith("/")) {
-            s3.deleteObjects(new DeleteObjectsRequest(bucketName)
-                    .withKeys(new String[]{path}));
+            s3.deleteObjects(DeleteObjectsRequest.builder()
+                    .bucket(bucketName)
+                    .delete(Delete.builder().objects(ObjectIdentifier.builder().key(path).build()).build())
+                    .build());
         }
 
         final String prefix = addTrailingSlash(path);
-        final ListObjectsV2Request listObjectsRequest = new ListObjectsV2Request()
-                .withBucketName(bucketName)
-                .withPrefix(prefix);
-        ListObjectsV2Result objectsListing;
+        String continuationToken = null;
+        ListObjectsV2Response objectsListing;
         do {
-            objectsListing = s3.listObjectsV2(listObjectsRequest);
-            final List<String> objectsToDelete = new ArrayList<>();
-            for (final S3ObjectSummary object : objectsListing.getObjectSummaries())
-                objectsToDelete.add(object.getKey());
+            objectsListing = s3.listObjectsV2(ListObjectsV2Request.builder()
+                    .bucket(bucketName)
+                    .prefix(prefix)
+                    .continuationToken(continuationToken)
+                    .build());
+            final List<ObjectIdentifier> objectsToDelete = new ArrayList<>();
+            for (final S3Object object : objectsListing.contents())
+                objectsToDelete.add(ObjectIdentifier.builder().key(object.key()).build());
 
             if (!objectsToDelete.isEmpty()) {
-                s3.deleteObjects(new DeleteObjectsRequest(bucketName)
-                        .withKeys(objectsToDelete.toArray(new String[objectsToDelete.size()])));
+                s3.deleteObjects(DeleteObjectsRequest.builder()
+                        .bucket(bucketName)
+                        .delete(Delete.builder().objects(objectsToDelete).build())
+                        .build());
             }
-            listObjectsRequest.setContinuationToken(objectsListing.getNextContinuationToken());
+            continuationToken = objectsListing.nextContinuationToken();
         } while (objectsListing.isTruncated());
-    }
-
-    /**
-     * Helper class that drains the rest of the {@link S3ObjectInputStream} on {@link #close()}.
-     *
-     * Without draining the stream AWS S3 SDK sometimes outputs the following warning message:
-     * "... Not all bytes were read from the S3ObjectInputStream, aborting HTTP connection ...".
-     *
-     * Draining the stream helps to avoid this warning and possibly reuse HTTP connections.
-     *
-     * Calling {@link S3ObjectInputStream#abort()} does not prevent this warning as discussed here:
-     * https://github.com/aws/aws-sdk-java/issues/1211
-     */
-    private static class S3ObjectInputStreamDrain extends InputStream {
-
-        private final S3ObjectInputStream in;
-        private boolean closed;
-
-        public S3ObjectInputStreamDrain(final S3ObjectInputStream in) {
-
-            this.in = in;
-        }
-
-        @Override
-        public int read() throws IOException {
-
-            return in.read();
-        }
-
-        @Override
-        public int read(final byte[] b, final int off, final int len) throws IOException {
-
-            return in.read(b, off, len);
-        }
-
-        @Override
-        public boolean markSupported() {
-
-            return in.markSupported();
-        }
-
-        @Override
-        public void mark(final int readlimit) {
-
-            in.mark(readlimit);
-        }
-
-        @Override
-        public void reset() throws IOException {
-
-            in.reset();
-        }
-
-        @Override
-        public int available() throws IOException {
-
-            return in.available();
-        }
-
-        @Override
-        public long skip(final long n) throws IOException {
-
-            return in.skip(n);
-        }
-
-        @Override
-        public void close() throws IOException {
-
-            if (!closed) {
-                do {
-                    in.skip(in.available());
-                } while (read() != -1);
-                in.close();
-                closed = true;
-            }
-        }
     }
 
     private class S3ObjectChannel implements LockedChannel {
@@ -531,12 +470,12 @@ public class MoleculeArchiveAmazonS3KeyValueAccess {
 
         @Override
         public InputStream newInputStream() throws IOException {
-            final S3ObjectInputStream in = s3.getObject(bucketName, path).getObjectContent();
-            final S3ObjectInputStreamDrain s3in = new S3ObjectInputStreamDrain(in);
+            final ResponseInputStream<GetObjectResponse> in = s3.getObject(
+                    GetObjectRequest.builder().bucket(bucketName).key(path).build());
             synchronized (resources) {
-                resources.add(s3in);
+                resources.add(in);
             }
-            return s3in;
+            return in;
         }
 
         @Override
@@ -600,11 +539,9 @@ public class MoleculeArchiveAmazonS3KeyValueAccess {
                 if (!closed) {
                     closed = true;
                     final byte[] bytes = buf.toByteArray();
-                    final ObjectMetadata objectMetadata = new ObjectMetadata();
-                    objectMetadata.setContentLength(bytes.length);
-                    try (final InputStream data = new ByteArrayInputStream(bytes)) {
-                        s3.putObject(bucketName, path, data, objectMetadata);
-                    }
+                    s3.putObject(
+                            PutObjectRequest.builder().bucket(bucketName).key(path).build(),
+                            RequestBody.fromBytes(bytes));
                     buf.close();
                 }
             }

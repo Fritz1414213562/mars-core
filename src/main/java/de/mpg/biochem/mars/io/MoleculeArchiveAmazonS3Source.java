@@ -29,8 +29,9 @@
 
 package de.mpg.biochem.mars.io;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3URI;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Uri;
+import software.amazon.awssdk.services.s3.model.GetUrlRequest;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
@@ -45,7 +46,7 @@ import java.net.UnknownHostException;
 import java.util.List;
 
 public class MoleculeArchiveAmazonS3Source implements MoleculeArchiveSource {
-    protected final AmazonS3 s3;
+    protected final S3Client s3;
     protected final String bucketName;
     protected String containerPath;
 
@@ -60,11 +61,11 @@ public class MoleculeArchiveAmazonS3Source implements MoleculeArchiveSource {
      * If the bucket does not exist, it will not be created and
      * all subsequent attempts to read attributes, groups, or datasets will fail.
      *
-     * @param s3 AmazonS3 location.
+     * @param s3 S3Client location.
      * @param bucketName the name of the bucket.
      * @throws IOException thrown when reading or writing to the location fails.
      */
-    public MoleculeArchiveAmazonS3Source(final AmazonS3 s3, final String bucketName) throws IOException {
+    public MoleculeArchiveAmazonS3Source(final S3Client s3, final String bucketName) throws IOException {
 
         this(s3, bucketName, "/");
     }
@@ -75,13 +76,14 @@ public class MoleculeArchiveAmazonS3Source implements MoleculeArchiveSource {
      * If the bucket and/or container does not exist, it will not be created and
      * all subsequent attempts to read attributes, groups, or datasets will fail.
      *
-     * @param s3 AmazonS3 location.
+     * @param s3 S3Client location.
      * @param containerURI the container uri.
      * @throws IOException thrown when reading or writing to the location fails.
      */
-    public MoleculeArchiveAmazonS3Source(final AmazonS3 s3, final AmazonS3URI containerURI) throws IOException {
+    public MoleculeArchiveAmazonS3Source(final S3Client s3, final S3Uri containerURI) throws IOException {
 
-        this(s3, containerURI.getBucket(), containerURI.getKey());
+        this(s3, containerURI.bucket().orElseThrow(() -> new IOException("No bucket specified in " + containerURI.uri())),
+                containerURI.key().orElse("/"));
     }
 
     /**
@@ -90,13 +92,13 @@ public class MoleculeArchiveAmazonS3Source implements MoleculeArchiveSource {
      * If the bucket and/or container does not exist, it will not be created and
      * all subsequent attempts to read attributes, groups, or datasets will fail.
      *
-     * @param s3 AmazonS3 location.
+     * @param s3 S3Client location.
      * @param bucketName the name of the bucket.
      * @param containerPath the object path within the bucket.
      * @throws IOException thrown when reading or writing to the location fails.
      */
     public MoleculeArchiveAmazonS3Source(
-            final AmazonS3 s3,
+            final S3Client s3,
             final String bucketName,
             final String containerPath) throws IOException {
 
@@ -152,7 +154,7 @@ public class MoleculeArchiveAmazonS3Source implements MoleculeArchiveSource {
 
     public boolean isReachable() {
         try{
-            URL url = s3.getUrl(bucketName,"/");
+            URL url = s3.utilities().getUrl(GetUrlRequest.builder().bucket(bucketName).key("/").build());
             HttpURLConnection connection = (HttpURLConnection)url.openConnection();
             connection.setRequestMethod("OPTIONS");
             connection.connect();
