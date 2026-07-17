@@ -34,15 +34,14 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.AnonymousAWSCredentials;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.regions.Regions;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.AmazonS3URI;
-import com.amazonaws.client.builder.AwsClientBuilder;
+import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Uri;
 
 public class MoleculeArchiveIOFactory {
 
@@ -52,25 +51,23 @@ public class MoleculeArchiveIOFactory {
      * @param endpoint
      * @return
      */
-    private static AmazonS3 createS3SourceWithEndpoint(final String endpoint) {
-        AmazonS3 s3;
-        AWSCredentials credentials = null;
+    private static S3Client createS3SourceWithEndpoint(final String endpoint) {
+        AwsCredentialsProvider credentialsProvider;
         try {
-            credentials = new DefaultAWSCredentialsProviderChain().getCredentials();
+            final AwsCredentials credentials = DefaultCredentialsProvider.create().resolveCredentials();
+            credentialsProvider = StaticCredentialsProvider.create(credentials);
         } catch(final Exception e) {
             System.out.println( "Could not load AWS credentials, falling back to anonymous." );
+            credentialsProvider = AnonymousCredentialsProvider.create();
         }
-        final AWSStaticCredentialsProvider credentialsProvider =
-                new AWSStaticCredentialsProvider(credentials == null ? new AnonymousAWSCredentials() : credentials);
 
         //US_EAST_2 is used as a dummy region.
-        s3 = AmazonS3ClientBuilder.standard()
-                .withPathStyleAccessEnabled(true)
-                .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(endpoint, Regions.US_EAST_2.getName()))
-                .withCredentials(credentialsProvider)
+        return S3Client.builder()
+                .forcePathStyle(true)
+                .endpointOverride(URI.create(endpoint))
+                .region(Region.US_EAST_2)
+                .credentialsProvider(credentialsProvider)
                 .build();
-
-        return s3;
     }
 
     /**
@@ -82,9 +79,9 @@ public class MoleculeArchiveIOFactory {
      * @throws IOException the io exception
      */
     public MoleculeArchiveAmazonS3Source openAWSS3SourceWithEndpoint(final String s3Url, final String endpointUrl) throws IOException {
-        return new MoleculeArchiveAmazonS3Source(
-                createS3SourceWithEndpoint(endpointUrl),
-                new AmazonS3URI(s3Url));
+        final S3Client s3 = createS3SourceWithEndpoint(endpointUrl);
+        final S3Uri containerURI = s3.utilities().parseUri(URI.create(s3Url));
+        return new MoleculeArchiveAmazonS3Source(s3, containerURI);
     }
 
     /**
