@@ -952,6 +952,7 @@ public abstract class AbstractMoleculeArchive<M extends Molecule, I extends Mars
 
 		properties().addMoleculeProperties(molecule);
 		properties().setNumberOfMolecules(getNumberOfMolecules());
+		molecule.setModified(false);
 	}
 
 	/**
@@ -980,6 +981,7 @@ public abstract class AbstractMoleculeArchive<M extends Molecule, I extends Mars
 
 		properties().addMetadataProperties(metadata);
 		properties().setNumberOfMetadatas(getNumberOfMetadatas());
+		metadata.setModified(false);
 	}
 
 	/**

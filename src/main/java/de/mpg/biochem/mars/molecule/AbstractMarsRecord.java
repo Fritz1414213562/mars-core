@@ -53,7 +53,11 @@ import java.util.Set;
  * and metadata information in {@link Molecule}, {@link AbstractMolecule},
  * {@link MarsMetadata}, {@link AbstractMarsMetadata}.
  * </p>
- * 
+ * <p>
+ * Every mutator here calls {@code markModified()} as its last statement. Any
+ * new mutator added to this class or a subclass must do the same.
+ * </p>
+ *
  * @author Karl Duderstadt
  */
 public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
@@ -342,6 +346,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void setNotes(String notes) {
 		this.notes = notes;
+		markModified();
 	}
 
 	/**
@@ -352,6 +357,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void addNote(String note) {
 		this.notes += note;
+		markModified();
 	}
 
 	/**
@@ -363,6 +369,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void addTag(String tag) {
 		tags.add(tag);
+		markModified();
 	}
 
 	/**
@@ -415,6 +422,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void removeTag(String tag) {
 		tags.remove(tag);
+		markModified();
 	}
 
 	/**
@@ -423,6 +431,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void removeAllTags() {
 		tags.clear();
+		markModified();
 	}
 
 	/**
@@ -435,6 +444,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void setParameter(String parameter, double value) {
 		parameters.put(parameter, value);
+		markModified();
 	}
 
 	/**
@@ -446,6 +456,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void setParameter(String parameter, String value) {
 		parameters.put(parameter, value);
+		markModified();
 	}
 
 	/**
@@ -457,6 +468,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void setParameter(String parameter, boolean value) {
 		parameters.put(parameter, value);
+		markModified();
 	}
 
 	/**
@@ -465,6 +477,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void removeAllParameters() {
 		parameters.clear();
+		markModified();
 	}
 
 	/**
@@ -475,6 +488,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void removeParameter(String parameter) {
 		parameters.remove(parameter);
+		markModified();
 	}
 
 	/**
@@ -597,6 +611,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void putRegion(MarsRegion regionOfInterest) {
 		regionsOfInterest.put(regionOfInterest.getName(), regionOfInterest);
+		markModified();
 	}
 
 	/**
@@ -628,6 +643,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void removeRegion(String name) {
 		regionsOfInterest.remove(name);
+		markModified();
 	}
 
 	/**
@@ -636,6 +652,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void removeAllRegions() {
 		regionsOfInterest.clear();
+		markModified();
 	}
 
 	/**
@@ -665,6 +682,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void putPosition(MarsPosition positionOfInterest) {
 		positionsOfInterest.put(positionOfInterest.getName(), positionOfInterest);
+		markModified();
 	}
 
 	/**
@@ -696,6 +714,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void removePosition(String name) {
 		positionsOfInterest.remove(name);
+		markModified();
 	}
 
 	/**
@@ -704,6 +723,7 @@ public abstract class AbstractMarsRecord extends AbstractJsonConvertibleRecord
 	@Override
 	public void removeAllPositions() {
 		positionsOfInterest.clear();
+		markModified();
 	}
 
 	/**

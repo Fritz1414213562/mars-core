@@ -352,9 +352,24 @@ public interface MarsRecord extends JsonConvertibleRecord {
 
 	/**
 	 * Set the parent {@link MoleculeArchive} that this record is stored in.
-	 * 
+	 *
 	 * @param archive The {@link MoleculeArchive} holding this record.
 	 */
 	void setParent(
 		MoleculeArchive<? extends Molecule, ? extends MarsMetadata, ? extends MoleculeArchiveProperties<?, ?>, ? extends MoleculeArchiveIndex<?, ?>> archive);
+
+	/**
+	 * Check whether this record has been modified in memory since it was last
+	 * loaded from or saved to disk.
+	 *
+	 * @return Returns true if the record differs from what is persisted on disk.
+	 */
+	boolean isModified();
+
+	/**
+	 * Set the modified state of this record.
+	 *
+	 * @param modified The modified state to set.
+	 */
+	void setModified(boolean modified);
 }

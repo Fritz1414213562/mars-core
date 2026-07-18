@@ -76,9 +76,47 @@ public abstract class AbstractJsonConvertibleRecord implements
 	private boolean showWarnings = true;
 
 	/**
+	 * Transient dirty flag. True when this record differs from what is
+	 * persisted on disk. Not serialized. Defaults to true so a freshly
+	 * constructed record (nothing on disk yet) is written by the first put().
+	 * Cleared at the end of {@link #fromJSON(JsonParser)} since a record just
+	 * loaded from disk matches what is on disk.
+	 */
+	protected transient boolean modified = true;
+
+	/**
 	 * Constructor for creating a JsonConvertibleRecord.
 	 */
 	public AbstractJsonConvertibleRecord() {}
+
+	/**
+	 * Check whether this record has been modified in memory since it was last
+	 * loaded from or saved to disk.
+	 *
+	 * @return Returns true if the record differs from what is persisted on disk.
+	 */
+	public boolean isModified() {
+		return modified;
+	}
+
+	/**
+	 * Set the modified state of this record.
+	 *
+	 * @param modified The modified state to set.
+	 */
+	public void setModified(boolean modified) {
+		this.modified = modified;
+	}
+
+	/**
+	 * Called by every mutator to flag that this record now differs from what is
+	 * persisted on disk. Kept as a named method (rather than inlining
+	 * {@code modified = true} in every mutator) so the convention is greppable
+	 * and future mutators are easy to get right.
+	 */
+	protected void markModified() {
+		this.modified = true;
+	}
 
 	/**
 	 * Stream a record to JSON. Stream a record from to a file using the
@@ -153,6 +191,8 @@ public abstract class AbstractJsonConvertibleRecord implements
 				MarsUtil.passThroughUnknownArrays(jParser);
 			}
 		}
+
+		modified = false;
 	}
 
 	@Override

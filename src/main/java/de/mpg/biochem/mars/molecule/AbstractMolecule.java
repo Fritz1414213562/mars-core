@@ -324,6 +324,7 @@ public abstract class AbstractMolecule extends AbstractMarsRecord implements
 			this.image = image;
 		}
 		else channel = -1;
+		markModified();
 	}
 
 	/**
@@ -351,6 +352,7 @@ public abstract class AbstractMolecule extends AbstractMarsRecord implements
 			if (parent != null) {
 				parent.properties().addChannel(channel);
 			}
+			markModified();
 		}
 	}
 
@@ -464,6 +466,7 @@ public abstract class AbstractMolecule extends AbstractMarsRecord implements
 	@Override
 	public void setTable(MarsTable table) {
 		this.table = table;
+		markModified();
 	}
 
 	/**
@@ -476,6 +479,7 @@ public abstract class AbstractMolecule extends AbstractMarsRecord implements
 	@Override
 	public void setMetadataUID(String metadataUID) {
 		this.metadataUID = metadataUID;
+		markModified();
 	}
 
 	/**
@@ -511,6 +515,7 @@ public abstract class AbstractMolecule extends AbstractMarsRecord implements
 		tableColumnNames.add(yColumn);
 		tableColumnNames.add("");
 		segmentTables.put(tableColumnNames, segmentsTable);
+		markModified();
 	}
 
 	/**
@@ -534,6 +539,7 @@ public abstract class AbstractMolecule extends AbstractMarsRecord implements
 		tableColumnNames.add(yColumn);
 		tableColumnNames.add(region);
 		segmentTables.put(tableColumnNames, segmentsTable);
+		markModified();
 	}
 
 	/**
@@ -634,6 +640,7 @@ public abstract class AbstractMolecule extends AbstractMarsRecord implements
 	@Override
 	public void removeSegmentsTable(List<String> tableColumnNames) {
 		segmentTables.remove(tableColumnNames);
+		markModified();
 	}
 
 	/**
@@ -650,6 +657,7 @@ public abstract class AbstractMolecule extends AbstractMarsRecord implements
 		tableColumnNames.add(yColumn);
 		tableColumnNames.add("");
 		segmentTables.remove(tableColumnNames);
+		markModified();
 	}
 
 	/**
@@ -669,6 +677,7 @@ public abstract class AbstractMolecule extends AbstractMarsRecord implements
 		tableColumnNames.add(yColumn);
 		tableColumnNames.add(region);
 		segmentTables.remove(tableColumnNames);
+		markModified();
 	}
 
 	/**
